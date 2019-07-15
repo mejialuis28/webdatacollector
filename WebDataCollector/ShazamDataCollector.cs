@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Net.Http;
 using System.Threading.Tasks;
+using WebDataCollector.Configuration;
 using WebDataCollector.Interfaces;
 using WebDataCollector.Models;
 
@@ -14,6 +15,7 @@ namespace WebDataCollector
     {
 
         private string _chartUrl;
+        private CosmosDB _cosmosDB;
 
         private readonly static Dictionary<string, string> countries = new Dictionary<string, string>
         {
@@ -24,7 +26,11 @@ namespace WebDataCollector
         };
 
         //constructor
-        public ShazamDataCollector(string chartUrl) => _chartUrl = chartUrl;
+        public ShazamDataCollector(string chartUrl, CosmosDB cosmos)
+        {
+            _chartUrl = chartUrl;
+            _cosmosDB = cosmos;
+        }
 
         public async Task<List<Dictionary<string, string>>> Collect()
         {
@@ -39,29 +45,19 @@ namespace WebDataCollector
             int counter = 1;
             foreach (var item in tracks)
             {
-                var title = item["heading"]["title"].ToString();
-                var artist = item["heading"]["subtitle"].ToString();
                 songs.Add(
                     new Dictionary<string, string>
                     {
                         { "rank", counter.ToString() },
-                        { "title", title },
-                        { "artist", artist }
+                        { "title", item["heading"]["title"].ToString() },
+                        { "artist", item["heading"]["subtitle"].ToString() }
                     }
                 );
-
                 counter++;
             }
 
             return songs;
         }
-
-
-        private readonly string Endpoint = "https://songdatatest.documents.azure.com:443/";
-        private readonly string Key = "atFPv1o5m7duF6RSnt2QyEzXOR2PGPBBhuYuF3owlJSuedWSLXUq96Kh3jsTfRvJXcjOrhrSE1Axe0XlMLHjTg==";
-        private readonly string DatabaseId = "SongsDataCollector";
-        private readonly string CollectionId = "Charts";
-        private DocumentClient client;
 
         public async Task CollectAndPublish() {
             var songs = await Collect();
@@ -72,8 +68,8 @@ namespace WebDataCollector
                 Source = "Shazam",
                 Chart = songs
             };
-            client = new DocumentClient(new Uri(Endpoint), Key);
-            await client.CreateDocumentAsync(UriFactory.CreateDocumentCollectionUri(DatabaseId, CollectionId), chartHarvest);
+            var client = new DocumentClient(new Uri(_cosmosDB.Endpoint), _cosmosDB.Key);
+            await client.CreateDocumentAsync(UriFactory.CreateDocumentCollectionUri(_cosmosDB.Database, "Charts"), chartHarvest);
         }
 
 
